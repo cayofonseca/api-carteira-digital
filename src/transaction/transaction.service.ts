@@ -68,4 +68,61 @@ export class TransactionService {
       await queryRunner.release();
     }
   }
+
+  public async estornar(transactionId: string) {
+    console.log('Criando o queryRunner...');
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const transaction = await queryRunner.manager.findOne(Transaction, {
+        where: { id: transactionId },
+        relations: ['senderWallet', 'receiverWallet'],
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!transaction) {
+        throw new NotFoundException('Transação não encontrada');
+      }
+
+      if (transaction.status !== Status.CONCLUIDA) {
+        throw new BadRequestException(
+          'Apenas transações concluídas podem ser estornadas',
+        );
+      }
+
+      const senderWallet = await queryRunner.manager.findOne(Wallet, {
+        where: { id: transaction.senderWallet.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      const receiverWallet = await queryRunner.manager.findOne(Wallet, {
+        where: { id: transaction.receiverWallet.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      receiverWallet.saldo =
+        Number(receiverWallet.saldo) - Number(transaction.valor);
+      senderWallet.saldo =
+        Number(senderWallet.saldo) + Number(transaction.valor);
+
+      transaction.status = Status.ESTORNADA;
+
+      await queryRunner.manager.save([
+        receiverWallet,
+        senderWallet,
+        transaction,
+      ]);
+
+      await queryRunner.commitTransaction();
+
+      return transaction;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
 }
