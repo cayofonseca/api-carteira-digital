@@ -1,98 +1,273 @@
+<h1 align="center">
+  💳 API Carteira Digital
+</h1>
+
 <p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
+  <img src="https://img.shields.io/badge/NestJS-11-E0234E?style=for-the-badge&logo=nestjs&logoColor=white" />
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
+  <img src="https://img.shields.io/badge/TypeORM-0.3-FE0803?style=for-the-badge&logo=typeorm&logoColor=white" />
+  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" />
+  <img src="https://img.shields.io/badge/JWT-Auth-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white" />
 </p>
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
-
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
+<p align="center">
+  <img src="https://img.shields.io/badge/Redis-Cache_(em_breve)-DC382D?style=for-the-badge&logo=redis&logoColor=white" />
+  <img src="https://img.shields.io/badge/Cookies-Em_breve-FF6B35?style=for-the-badge" />
 </p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
-## Description
+<p align="center">
+  API REST de carteira digital desenvolvida com foco em <strong>integridade de dados em operações financeiras</strong>, utilizando <strong>transações de banco de dados</strong>, <strong>pessimistic locking</strong> e <strong>QueryRunner</strong> para garantir consistência em cenários de alta concorrência.
+</p>
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+---
 
-## Project setup
+## 🎯 Objetivo do Projeto
 
-```bash
-$ npm install
+Este projeto é um laboratório prático para estudar e implementar mecanismos críticos de segurança em bancos de dados relacionais, com ênfase em:
+
+- **Controle transacional explícito** com QueryRunner
+- **Trava pessimista de banco de dados** (`pessimistic_write`) para evitar race conditions em movimentações financeiras
+- **Rollback automático** em caso de falhas durante operações sensíveis
+- **Cache distribuído** com Redis _(em desenvolvimento)_
+- **Autenticação stateful** via Cookies HTTP-only _(em desenvolvimento)_
+
+---
+
+## 🏗️ Arquitetura
+
+```
+src/
+├── auth/               # Autenticação JWT + Passport (Local & JWT strategies)
+├── common/
+│   ├── enum/           # Enums compartilhados (Status da transação)
+│   ├── filter/         # Filtro global de exceções
+│   └── interceptors/   # Interceptor global de resposta
+├── guards/             # Guards JWT e Local + Strategies
+├── transaction/        # Módulo de transações financeiras ← núcleo do projeto
+├── users/              # Gerenciamento de usuários
+├── wallet/             # Gerenciamento de carteiras
+└── main.ts
 ```
 
-## Compile and run the project
+---
 
-```bash
-# development
-$ npm run start
+## 🔐 O Núcleo: Travamento Pessimista de Banco de Dados
 
-# watch mode
-$ npm run start:dev
+O ponto central deste projeto é a implementação de **pessimistic locking** com **QueryRunner** do TypeORM para garantir que operações financeiras concorrentes não causem inconsistências.
 
-# production mode
-$ npm run start:prod
+### Por que Pessimistic Lock?
+
+Em sistemas financeiros, múltiplas requisições podem tentar modificar o mesmo registro simultaneamente. Sem um mecanismo de trava, cenários como o abaixo são possíveis:
+
+```
+Saldo inicial da carteira: R$ 100,00
+
+[Req A] lê saldo → R$ 100,00
+[Req B] lê saldo → R$ 100,00   ← lê ANTES de A gravar
+[Req A] debita R$ 80,00 → grava R$ 20,00
+[Req B] debita R$ 80,00 → grava R$ 20,00  ← INCONSISTÊNCIA! Saldo deveria ser negativo
 ```
 
-## Run tests
+Com `pessimistic_write`, a segunda requisição aguarda a primeira terminar antes de ler o registro, eliminando a race condition.
 
-```bash
-# unit tests
-$ npm run test
+### Fluxo da Transferência
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+```
+POST /transaction/transferir
+         │
+         ▼
+┌─────────────────────────────────────────┐
+│           QueryRunner criado            │
+│         Transação iniciada              │
+├─────────────────────────────────────────┤
+│  🔒 LOCK: carteira remetente            │  ← pessimistic_write
+│  🔒 LOCK: carteira destinatário         │  ← pessimistic_write
+├─────────────────────────────────────────┤
+│  Validações de negócio                  │
+│  • Carteiras existem?                   │
+│  • Saldo suficiente?                    │
+├─────────────────────────────────────────┤
+│  Atualiza saldos                        │
+│  Cria registro da transação             │
+│  Persiste tudo em batch                 │
+├─────────────────────────────────────────┤
+│  ✅ COMMIT    │    ❌ ROLLBACK           │
+└──────────────┴──────────────────────────┘
+        │                   │
+   Sucesso            Erro → exceção
+                      relançada
 ```
 
-## Deployment
+### Trecho de Código — Transferência com Lock
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+```typescript
+const queryRunner = this.dataSource.createQueryRunner();
+await queryRunner.connect();
+await queryRunner.startTransaction();
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+try {
+  // Trava as linhas para escrita exclusiva — outras transações aguardam
+  const senderWallet = await queryRunner.manager.findOne(Wallet, {
+    where: { id: dados.senderWalletId },
+    lock: { mode: 'pessimistic_write' },
+  });
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+  const receiverWallet = await queryRunner.manager.findOne(Wallet, {
+    where: { id: dados.receiverWalletId },
+    lock: { mode: 'pessimistic_write' },
+  });
+
+  // ... validações e atualização de saldos ...
+
+  await queryRunner.commitTransaction();
+} catch (error) {
+  await queryRunner.rollbackTransaction(); // Desfaz tudo em caso de falha
+  throw error;
+} finally {
+  await queryRunner.release(); // Libera a conexão de volta ao pool
+}
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Resources
+## ✨ Funcionalidades
 
-Check out a few resources that may come in handy when working with NestJS:
+| Módulo        | Endpoint                    | Método | Descrição                              |
+| ------------- | --------------------------- | ------ | -------------------------------------- |
+| **Usuários**  | `/users`                    | `POST` | Cadastro de novo usuário               |
+| **Auth**      | `/auth/login`               | `POST` | Login com email e senha                |
+| **Carteira**  | `/wallet`                   | `POST` | Cria carteira vinculada ao usuário     |
+| **Transação** | `/transaction/transferir`   | `POST` | Transferência entre carteiras com lock |
+| **Transação** | `/transaction/estornar/:id` | `POST` | Estorno de transação com lock          |
+| **Transação** | `/transaction/report`       | `GET`  | Relatório financeiro por período       |
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+> Todos os endpoints de transação e carteira exigem autenticação JWT via Bearer Token.
 
-## Support
+---
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## 🗄️ Modelo de Dados
 
-## Stay in touch
+```
+┌─────────────┐       ┌─────────────┐       ┌──────────────────────┐
+│    users    │       │   wallets   │       │     transactions     │
+├─────────────┤       ├─────────────┤       ├──────────────────────┤
+│ id (uuid)   │──1:1──│ id (uuid)   │──1:N──│ id (uuid)            │
+│ name        │       │ saldo       │       │ valor                │
+│ email       │       │ userId (FK) │       │ status (enum)        │
+│ password    │       └─────────────┘       │ senderWalletId (FK)  │
+└─────────────┘                             │ receiverWalletId (FK)│
+                                            │ createdAt            │
+                                            └──────────────────────┘
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+Status: PENDENTE | CONCLUIDA | ESTORNADA
+```
 
-## License
+---
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+## 🛡️ Segurança
+
+- **Senhas** criptografadas com `bcrypt`
+- **Autenticação** via JWT (Passport + `@nestjs/jwt`)
+- **Rotas protegidas** com Guards customizados (`JwtGuard`, `LocalGuard`)
+- **Travamento de banco** evita duplo-gasto e race conditions
+- **Rollback transacional** garante atomicidade em todas as operações financeiras
+
+---
+
+## 🚧 Roadmap
+
+- [x] Autenticação JWT com Passport
+- [x] CRUD de usuários e carteiras
+- [x] Transferência com QueryRunner + Pessimistic Lock
+- [x] Estorno com QueryRunner + Pessimistic Lock
+- [x] Relatório financeiro por período
+- [x] Filtro global de exceções
+- [ ] **Cache com Redis** — respostas de relatórios e dados de carteira
+- [ ] **Cookies HTTP-only** — sessão stateful como alternativa ao Bearer Token
+
+---
+
+## 🚀 Como Executar
+
+### Pré-requisitos
+
+- Node.js 20+
+- Docker e Docker Compose
+
+### Instalação
+
+```bash
+# Clone o repositório
+git clone https://github.com/seu-usuario/api-carteira-digital.git
+cd api-carteira-digital
+
+# Instale as dependências
+npm install
+```
+
+### Variáveis de Ambiente
+
+Crie um arquivo `.env` na raiz do projeto:
+
+```env
+# Banco de Dados
+DB_HOST=localhost
+DB_PORT=5432
+DB_USERNAME=postgres
+DB_PASSWORD=postgres
+DB_DATABASE=carteira_digital
+
+# JWT
+JWT_SECRET=sua_chave_secreta_aqui
+JWT_EXPIRES_IN=1d
+```
+
+### Executando
+
+```bash
+# Subir banco de dados via Docker
+docker compose up -d
+
+# Desenvolvimento (hot-reload)
+npm run start:dev
+
+# Produção
+npm run build
+npm run start:prod
+```
+
+---
+
+## 🧪 Testes
+
+```bash
+# Testes unitários
+npm run test
+
+# Testes com cobertura
+npm run test:cov
+
+# Testes E2E
+npm run test:e2e
+```
+
+---
+
+## 🛠️ Stack
+
+| Tecnologia  | Versão       | Uso                         |
+| ----------- | ------------ | --------------------------- |
+| NestJS      | 11           | Framework principal         |
+| TypeScript  | 5            | Linguagem                   |
+| TypeORM     | 0.3          | ORM + QueryRunner + Locks   |
+| PostgreSQL  | —            | Banco de dados relacional   |
+| Passport.js | —            | Estratégias de autenticação |
+| JWT         | —            | Tokens de acesso            |
+| bcrypt      | —            | Hash de senhas              |
+| Redis       | _(em breve)_ | Cache distribuído           |
+
+---
+
+<p align="center">
+  Desenvolvido com foco em aprendizado de mecanismos de integridade transacional em sistemas financeiros.
+</p>
