@@ -25,6 +25,6 @@ export class Wallet {
   saldo: number;
 
   @OneToOne(() => User, (user) => user.wallet)
-  @JoinColumn()
+  @JoinColumn({ name: 'userId' })
   user: User;
 }

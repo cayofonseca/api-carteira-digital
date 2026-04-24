@@ -13,7 +13,6 @@ import { AuthModule } from './auth/auth.module';
     ConfigModule.forRoot({ isGlobal: true }),
 
     TypeOrmModule.forRootAsync({
-      // 👇 A MÁGICA ESTÁ NESTA LINHA 👇
       imports: [ConfigModule],
 
       inject: [ConfigService],

@@ -1,15 +1,17 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
-  ParseIntPipe,
   Post,
   Req,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { TransactionService } from './transaction.service';
 import { createTransactionDto } from './dto/create-transaction.dto';
 import { JwtGuard } from '../guards/jwt-auth.guard';
+import { FinancialReportDto } from './dto/financial-report.dto';
 
 @Controller('transaction')
 @UseGuards(JwtGuard)
@@ -23,7 +25,16 @@ export class TransactionController {
   }
 
   @Post('estornar/:id')
-  async estornar(@Param('id') id: string) {
+  async estornar(@Param('id') id: string, @Req() req: any) {
     return await this.transactionService.estornar(id);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('report')
+  async report(
+    @Query() financialReportDto: FinancialReportDto,
+    @Req() req: any,
+  ) {
+    return await this.transactionService.report(financialReportDto, req.user);
   }
 }

@@ -1,13 +1,15 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { Between, DataSource } from 'typeorm';
 import { Transaction } from './entity/transaction.entity';
 import { createTransactionDto } from './dto/create-transaction.dto';
 import { Wallet } from '../wallet/entity/wallet.entity';
 import { Status } from '../common/enum/status.enum';
+import { FinancialReportDto } from './dto/financial-report.dto';
 
 @Injectable()
 export class TransactionService {
@@ -124,5 +126,76 @@ export class TransactionService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  async report(financialReportDto: FinancialReportDto, userPayload: any) {
+    const { walletId, startDate, endDate } = financialReportDto;
+
+    const userId = userPayload.userId || userPayload.id;
+
+    console.log('ID DO USUÁRIO EXTRAÍDO:', userId);
+
+    const wallet = await this.dataSource.getRepository(Wallet).findOne({
+      where: {
+        id: walletId,
+        user: { id: userId },
+      },
+    });
+
+    if (!wallet) {
+      throw new ForbiddenException(
+        'Acesso negado: esta carteira não pertence a você.',
+      );
+    }
+
+    const resEntradas = await this.dataSource
+      .getRepository(Transaction)
+      .createQueryBuilder('t')
+      .select('SUM(t.valor)', 'total')
+      .where('t.receiverWalletId = :walletId', { walletId })
+      .andWhere('t.createdAt BETWEEN :startDate AND :endDate', {
+        startDate,
+        endDate,
+      })
+      .getRawOne();
+
+    const resSaidas = await this.dataSource
+      .getRepository(Transaction)
+      .createQueryBuilder('t')
+      .select('SUM(t.valor)', 'total')
+      .where('t.senderWalletId = :walletId', { walletId })
+      .andWhere('t.createdAt BETWEEN :startDate AND :endDate', {
+        startDate,
+        endDate,
+      })
+      .getRawOne();
+
+    const entradas = Number(resEntradas?.total || 0);
+    const saidas = Number(resSaidas?.total || 0);
+
+    const transacoes = await this.dataSource.getRepository(Transaction).find({
+      where: [
+        {
+          senderWallet: { id: walletId },
+          createdAt: Between(new Date(startDate), new Date(endDate)),
+        },
+        {
+          receiverWallet: { id: walletId },
+          createdAt: Between(new Date(startDate), new Date(endDate)),
+        },
+      ],
+      order: { createdAt: 'DESC' },
+    });
+
+    return {
+      walletId,
+      periodo: { startDate, endDate },
+      resumo: {
+        entradas,
+        saidas,
+        saldoLiquido: entradas - saidas,
+      },
+      transacoes,
+    };
   }
 }

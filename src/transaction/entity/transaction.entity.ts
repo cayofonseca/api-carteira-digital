@@ -1,4 +1,10 @@
-import { Column, Entity, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { Status } from '../../common/enum/status.enum';
 import { Wallet } from '../../wallet/entity/wallet.entity';
 
@@ -26,4 +32,10 @@ export class Transaction {
 
   @ManyToOne(() => Wallet)
   receiverWallet: Wallet;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @CreateDateColumn()
+  updatedAt: Date;
 }
