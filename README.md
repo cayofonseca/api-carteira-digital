@@ -288,7 +288,7 @@ npm run test:e2e
 | Passport.js | —            | Estratégias de autenticação |
 | JWT         | —            | Tokens de acesso            |
 | bcrypt      | —            | Hash de senhas              |
-| Redis       | _(em breve)_ | Cache distribuído           |
+| Redis       |              | Cache distribuído           |
 
 ---
 

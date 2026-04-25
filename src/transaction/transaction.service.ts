@@ -13,12 +13,14 @@ import { Status } from '../common/enum/status.enum';
 import { FinancialReportDto } from './dto/financial-report.dto';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
+import { TransactionValidator } from './transaction.validator';
 
 @Injectable()
 export class TransactionService {
   constructor(
     private dataSource: DataSource,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private readonly validator: TransactionValidator,
   ) {}
 
   public async transferir(dados: createTransactionDto) {
@@ -38,17 +40,11 @@ export class TransactionService {
         lock: { mode: 'pessimistic_write' },
       });
 
-      if (!senderWallet || !receiverWallet) {
-        throw new NotFoundException(
-          'Carteira de origem ou destino não encontrada',
-        );
-      }
-
-      if (senderWallet.saldo < dados.valor) {
-        throw new BadRequestException(
-          'Saldo insuficiente para realizar a transferência',
-        );
-      }
+      this.validator.validateTransfer(
+        senderWallet,
+        receiverWallet,
+        dados.valor,
+      );
 
       senderWallet.saldo = Number(senderWallet.saldo) - Number(dados.valor);
       receiverWallet.saldo = Number(receiverWallet.saldo) + Number(dados.valor);
@@ -96,15 +92,7 @@ export class TransactionService {
         lock: { mode: 'pessimistic_write' },
       });
 
-      if (!transaction) {
-        throw new NotFoundException('Transação não encontrada');
-      }
-
-      if (transaction.status !== Status.CONCLUIDA) {
-        throw new BadRequestException(
-          'Apenas transações concluídas podem ser estornadas',
-        );
-      }
+      this.validator.validateReversal(transaction);
 
       const senderWallet = await queryRunner.manager.findOne(Wallet, {
         where: { id: transaction.senderWallet.id },
