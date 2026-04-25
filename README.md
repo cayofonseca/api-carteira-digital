@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Redis-Cache_(em_breve)-DC382D?style=for-the-badge&logo=redis&logoColor=white" />
+  <img src="https://img.shields.io/badge/Redis-Cache-DC382D?style=for-the-badge&logo=redis&logoColor=white" />
   <img src="https://img.shields.io/badge/Cookies-Em_breve-FF6B35?style=for-the-badge" />
 </p>
 
@@ -28,7 +28,7 @@ Este projeto é um laboratório prático para estudar e implementar mecanismos c
 - **Controle transacional explícito** com QueryRunner
 - **Trava pessimista de banco de dados** (`pessimistic_write`) para evitar race conditions em movimentações financeiras
 - **Rollback automático** em caso de falhas durante operações sensíveis
-- **Cache distribuído** com Redis _(em desenvolvimento)_
+- **Cache distribuído** com Redis para relatórios financeiros
 - **Autenticação stateful** via Cookies HTTP-only _(em desenvolvimento)_
 
 ---
@@ -139,9 +139,33 @@ try {
 | **Carteira**  | `/wallet`                   | `POST` | Cria carteira vinculada ao usuário     |
 | **Transação** | `/transaction/transferir`   | `POST` | Transferência entre carteiras com lock |
 | **Transação** | `/transaction/estornar/:id` | `POST` | Estorno de transação com lock          |
-| **Transação** | `/transaction/report`       | `GET`  | Relatório financeiro por período       |
+| **Transação** | `/transaction/report`       | `GET`  | Relatório com Cache Redis              |
 
 > Todos os endpoints de transação e carteira exigem autenticação JWT via Bearer Token.
+
+---
+
+## ⚡ Cache com Redis
+
+Para otimizar a performance em consultas pesadas, implementamos uma estratégia de cache no endpoint de relatório financeiro (`/transaction/report`).
+
+### Funcionamento do Cache:
+
+1. **Consulta (Cache-Aside):** Quando um relatório é solicitado, a API primeiro verifica no Redis se existe um resultado pronto para a chave composta (`report_{walletId}_{startDate}_{endDate}`).
+2. **Hit:** Se os dados estiverem no Redis, eles são retornados instantaneamente.
+3. **Miss:** Se não houver cache, a API realiza as agregações (`SUM`, `COUNT`) no PostgreSQL, armazena o resultado no Redis e retorna ao usuário.
+4. **Invalidação:** Sempre que uma nova transferência é realizada com sucesso, o cache é **limpo automaticamente** para garantir que o próximo relatório reflita os valores atualizados.
+
+```typescript
+// Exemplo de verificação no service
+const cachedData = await this.cacheManager.get(cacheKey);
+if (cachedData) return cachedData;
+
+// ... consulta no banco ...
+
+// Exemplo de invalidação após transferência
+await this.cacheManager.clear();
+```
 
 ---
 
