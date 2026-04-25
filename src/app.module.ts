@@ -34,10 +34,7 @@ import { redisStore } from 'cache-manager-redis-yet';
       isGlobal: true,
       useFactory: async () => ({
         store: await redisStore({
-          socket: {
-            host: 'localhost',
-            port: 6379,
-          },
+          url: 'redis://localhost:6379',
           ttl: 60000,
         }),
       }),

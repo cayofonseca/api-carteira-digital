@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Inject,
 } from '@nestjs/common';
 import { Between, DataSource } from 'typeorm';
 import { Transaction } from './entity/transaction.entity';
@@ -10,10 +11,15 @@ import { createTransactionDto } from './dto/create-transaction.dto';
 import { Wallet } from '../wallet/entity/wallet.entity';
 import { Status } from '../common/enum/status.enum';
 import { FinancialReportDto } from './dto/financial-report.dto';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 
 @Injectable()
 export class TransactionService {
-  constructor(private dataSource: DataSource) {}
+  constructor(
+    private dataSource: DataSource,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+  ) {}
 
   public async transferir(dados: createTransactionDto) {
     console.log('Criando o Query Runner...');
@@ -61,6 +67,12 @@ export class TransactionService {
       ]);
 
       await queryRunner.commitTransaction();
+
+      console.log(
+        'Transferência realizada com sucesso! Limpando o cache no Redis...',
+      );
+      await this.cacheManager.clear();
+      console.log('Cache limpo com sucesso!');
 
       return novaTransacao;
     } catch (error) {
@@ -133,7 +145,17 @@ export class TransactionService {
 
     const userId = userPayload.userId || userPayload.id;
 
-    console.log('ID DO USUÁRIO EXTRAÍDO:', userId);
+    const cacheKey = `report_${walletId}_${startDate}_${endDate}`;
+    const cachedData = await this.cacheManager.get(cacheKey);
+
+    if (cachedData) {
+      console.log('Dados encontrados no cache...');
+      return cachedData;
+    }
+
+    console.log(
+      'Dados não encontrados no cache, consultando o banco de dados...',
+    );
 
     const wallet = await this.dataSource.getRepository(Wallet).findOne({
       where: {
@@ -187,7 +209,7 @@ export class TransactionService {
       order: { createdAt: 'DESC' },
     });
 
-    return {
+    const resultadoFinal = {
       walletId,
       periodo: { startDate, endDate },
       resumo: {
@@ -197,5 +219,11 @@ export class TransactionService {
       },
       transacoes,
     };
+
+    console.log('Salvando o resultado no Redis...');
+    await this.cacheManager.set(cacheKey, resultadoFinal, 60000);
+    console.log('Salvo com sucesso!');
+
+    return resultadoFinal;
   }
 }

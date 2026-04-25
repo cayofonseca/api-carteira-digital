@@ -20,7 +20,7 @@ export class TransactionController {
 
   @Post('transferir')
   async transferir(@Body() dados: createTransactionDto, @Req() req: any) {
-    console.log(`Usuário logado fazendo a transferência: ${req.user}`);
+    console.log('Usuário logado fazendo a transferência:', req.user);
     return await this.transactionService.transferir(dados);
   }
 
