@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Between, DataSource } from 'typeorm';
 import { Transaction } from './entity/transaction.entity';
-import { createTransactionDto } from './dto/create-transaction.dto';
+import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { Wallet } from '../wallet/entity/wallet.entity';
 import { Status } from '../common/enum/status.enum';
 import { FinancialReportDto } from './dto/financial-report.dto';
@@ -23,7 +23,7 @@ export class TransactionService {
     private readonly validator: TransactionValidator,
   ) {}
 
-  public async transferir(dados: createTransactionDto) {
+  public async transferir(dados: CreateTransactionDto) {
     console.log('Criando o Query Runner...');
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();

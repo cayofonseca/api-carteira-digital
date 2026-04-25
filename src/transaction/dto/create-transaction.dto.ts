@@ -6,7 +6,7 @@ import {
   NotEquals,
 } from 'class-validator';
 
-export class createTransactionDto {
+export class CreateTransactionDto {
   @IsUUID()
   @IsNotEmpty()
   senderWalletId: string;

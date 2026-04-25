@@ -3,7 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { UsersModule } from './users/users.module';
+import { UserModule } from './user/user.module';
 import { WalletModule } from './wallet/wallet.module';
 import { TransactionModule } from './transaction/transaction.module';
 import { AuthModule } from './auth/auth.module';
@@ -40,7 +40,7 @@ import { redisStore } from 'cache-manager-redis-yet';
       }),
     }),
 
-    UsersModule,
+    UserModule,
     WalletModule,
     TransactionModule,
     AuthModule,
