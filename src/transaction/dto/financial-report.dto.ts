@@ -3,6 +3,7 @@ import { IsDateString, IsOptional, IsString, IsUUID } from 'class-validator';
 export class FinancialReportDto {
   @IsUUID()
   @IsString()
+  @IsOptional()
   walletId: string;
 
   @IsDateString()

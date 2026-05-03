@@ -9,13 +9,6 @@ import {
 export class CreateTransactionDto {
   @IsUUID()
   @IsNotEmpty()
-  senderWalletId: string;
-
-  @IsUUID()
-  @IsNotEmpty()
-  @NotEquals('senderWalletId', {
-    message: 'As carteiras de origem e destino não podem ser iguais',
-  })
   receiverWalletId: string;
 
   @IsNumber()

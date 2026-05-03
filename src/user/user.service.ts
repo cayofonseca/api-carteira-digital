@@ -25,7 +25,8 @@ export class UserService {
       throw new ConflictException('E-mail já cadastrado');
     }
 
-    const hashedPassword = await bcrypt.hash(dados.password, 10);
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(dados.password, salt);
 
     const newUser = this.userRepository.create({
       nome: dados.nome,

@@ -23,15 +23,21 @@ export class TransactionService {
     private readonly validator: TransactionValidator,
   ) {}
 
-  public async transferir(dados: CreateTransactionDto) {
+  public async transferir(dados: CreateTransactionDto, user: any) {
     console.log('Criando o Query Runner...');
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
+    const userId = user.userId || user.sub;
+
+    if (!userId) {
+      throw new ForbiddenException('Usuário não autenticado');
+    }
+
     try {
       const senderWallet = await queryRunner.manager.findOne(Wallet, {
-        where: { id: dados.senderWalletId },
+        where: { user: { id: userId } },
         lock: { mode: 'pessimistic_write' },
       });
 
@@ -39,6 +45,12 @@ export class TransactionService {
         where: { id: dados.receiverWalletId },
         lock: { mode: 'pessimistic_write' },
       });
+
+      if (senderWallet.id === dados.receiverWalletId) {
+        throw new BadRequestException(
+          'As carteiras de origem e destino não podem ser iguais',
+        );
+      }
 
       this.validator.validateTransfer(
         senderWallet,
@@ -79,18 +91,26 @@ export class TransactionService {
     }
   }
 
-  public async estornar(transactionId: string) {
+  public async estornar(transactionId: string, user: any) {
+    const userId = user.userId || user.sub;
     console.log('Criando o queryRunner...');
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      const transaction = await queryRunner.manager.findOne(Transaction, {
-        where: { id: transactionId },
-        relations: ['senderWallet', 'receiverWallet'],
-        lock: { mode: 'pessimistic_write' },
-      });
+      const transaction = await queryRunner.manager
+        .createQueryBuilder(Transaction, 'transaction')
+        .innerJoinAndSelect('transaction.senderWallet', 'senderWallet')
+        .innerJoinAndSelect('senderWallet.user', 'user')
+        .innerJoinAndSelect('transaction.receiverWallet', 'receiverWallet')
+        .where('transaction.id = :transactionId', { transactionId })
+        .setLock('pessimistic_write')
+        .getOne();
+
+      if (!transaction) {
+        throw new NotFoundException('Transação não encontrada');
+      }
 
       this.validator.validateReversal(transaction);
 
@@ -128,90 +148,68 @@ export class TransactionService {
     }
   }
 
-  async report(financialReportDto: FinancialReportDto, userPayload: any) {
-    const { walletId, startDate, endDate } = financialReportDto;
-
-    const userId = userPayload.userId || userPayload.id;
-
-    const cacheKey = `report_${walletId}_${startDate}_${endDate}`;
-    const cachedData = await this.cacheManager.get(cacheKey);
-
-    if (cachedData) {
-      console.log('Dados encontrados no cache...');
-      return cachedData;
-    }
-
+  async report(dto: FinancialReportDto, user: any) {
     console.log(
-      'Dados não encontrados no cache, consultando o banco de dados...',
+      `[DEBUG] Buscando carteira para o USER_ID: ${user.userId || user.sub}`,
     );
-
-    const wallet = await this.dataSource.getRepository(Wallet).findOne({
-      where: {
-        id: walletId,
-        user: { id: userId },
-      },
+    const userId = user.userId || user.sub;
+    if (!userId) {
+      throw new ForbiddenException('Usuário não autenticado');
+    }
+    const carteira = await this.dataSource.manager.findOne(Wallet, {
+      where: { user: { id: userId } },
     });
 
-    if (!wallet) {
-      throw new ForbiddenException(
-        'Acesso negado: esta carteira não pertence a você.',
-      );
-    }
+    console.log(
+      `[REPORT] Consultando saldo da carteira: ${carteira.id} para o usuário: ${user.email}`,
+    );
 
-    const resEntradas = await this.dataSource
-      .getRepository(Transaction)
-      .createQueryBuilder('t')
-      .select('SUM(t.valor)', 'total')
-      .where('t.receiverWalletId = :walletId', { walletId })
-      .andWhere('t.createdAt BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      })
-      .getRawOne();
+    console.log('CARTEIRA ENCONTRADA:', carteira);
 
-    const resSaidas = await this.dataSource
-      .getRepository(Transaction)
-      .createQueryBuilder('t')
-      .select('SUM(t.valor)', 'total')
-      .where('t.senderWalletId = :walletId', { walletId })
-      .andWhere('t.createdAt BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      })
-      .getRawOne();
-
-    const entradas = Number(resEntradas?.total || 0);
-    const saidas = Number(resSaidas?.total || 0);
-
-    const transacoes = await this.dataSource.getRepository(Transaction).find({
+    const transacoesDb = await this.dataSource.manager.find(Transaction, {
       where: [
-        {
-          senderWallet: { id: walletId },
-          createdAt: Between(new Date(startDate), new Date(endDate)),
-        },
-        {
-          receiverWallet: { id: walletId },
-          createdAt: Between(new Date(startDate), new Date(endDate)),
-        },
+        { senderWallet: { id: carteira.id } },
+        { receiverWallet: { id: carteira.id } },
+      ],
+      relations: [
+        'senderWallet',
+        'senderWallet.user',
+        'receiverWallet',
+        'receiverWallet.user',
       ],
       order: { createdAt: 'DESC' },
     });
 
-    const resultadoFinal = {
-      walletId,
-      periodo: { startDate, endDate },
-      resumo: {
-        entradas,
-        saidas,
-        saldoLiquido: entradas - saidas,
-      },
-      transacoes,
+    console.log(
+      'Exemplo de transação carregada:',
+      JSON.stringify(transacoesDb[0], null, 2),
+    );
+
+    let totalEntradas = 0;
+    let totalSaidas = 0;
+
+    const ultimasTransacoes = transacoesDb.map((t) => {
+      const isEntrada = t.receiverWallet?.id === carteira.id;
+
+      const pessoaEnvolvida = isEntrada
+        ? t.senderWallet?.user?.nome
+        : t.receiverWallet?.user?.nome;
+
+      return {
+        id: t.id,
+        data: t.createdAt,
+        valor: Number(t.valor),
+        tipo: isEntrada ? 'Entrada' : 'Saída',
+        envolvido: pessoaEnvolvida || 'Desconhecido',
+      };
+    });
+
+    return {
+      carteiraId: carteira.id,
+      saldo: Number(carteira.saldo),
+      entradas: totalEntradas,
+      saidas: totalSaidas,
+      ultimasTransacoes: ultimasTransacoes,
     };
-
-    console.log('Salvando o resultado no Redis...');
-    await this.cacheManager.set(cacheKey, resultadoFinal, 60000);
-    console.log('Salvo com sucesso!');
-
-    return resultadoFinal;
   }
 }
